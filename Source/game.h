@@ -8,7 +8,7 @@ enum struct GameState
 	MAIN_MENU,
 	GAME,
 	WIN,
-	LOSE
+	LOSE,
 };
 
 struct Entity
@@ -81,7 +81,6 @@ namespace Game
 
 	Entity* get_entity(size_t id);
 	size_t add_entity(const Entity& entity);
-
 	void init();
 	void deinit();
 

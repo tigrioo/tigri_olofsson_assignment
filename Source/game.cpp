@@ -7,8 +7,11 @@
 
 #include <stack>
 #include <vector>
+
 namespace Game
 {
+    static float timer = 0.0f;
+    static float time_in_between = 0.5f; 
     bool game_is_dead = false; 
 };
 void Entity::update()
@@ -39,6 +42,7 @@ void Entity::update()
     }
 }
 
+ 
 void Entity::draw() const
 {
     if(texture.id)
@@ -60,6 +64,10 @@ void Entity::on_collision(Entity& other)
     if(deal_damage_on_collision)
     {
         other.take_damage(*this, Game::PROJECTILE_DAMAGE);
+        if (other.health <= 0 && possessed_entity_id == 1) {
+            isdead = true;
+            possessed_entity_id = 0;
+        }
     }
     
 }
@@ -75,9 +83,10 @@ void Entity::take_damage([[maybe_unused]] Entity& from, float damage)
 
     PlaySound(res::get_or_load_sound("Assets/hit.wav"));
     
-    if (health <=0 && possessed_entity_id == 1)
+    if (health <=0 && possessed_entity_id)
     {
         isdead = true;
+        possessed_entity_id = 0;
         PlaySound(res::get_or_load_sound("Assets/hit_ground.wav")); 
     }
    
@@ -124,6 +133,7 @@ namespace Game
 
 	void init()
 	{
+        game_is_dead = false;
         running = true;
         push_game_state(GameState::MAIN_MENU);
         
@@ -470,10 +480,24 @@ namespace Game
             pop_game_state();
         }
        
-       // if (Game::game_is_dead) {
-       //     push_game_state(GameState::LOSE);
-       // }
+        if (Game::game_is_dead) {
+            if (state_stack.top() != GameState::LOSE) {
+                push_game_state(GameState::LOSE);
+                return;
+            }
+            else {
+                push_game_state(GameState::LOSE);
+                return;
+            }
+            
+        }
+        if (entities.size() <= 1) {
+            push_game_state(GameState::WIN);
+        }
+        if (entities[0].health <= 0) {
+            push_game_state(GameState::LOSE);
 
+        }
         if (possessed_entity_id) {
             Entity* possessed_entity = get_entity(possessed_entity_id);
             if (possessed_entity && possessed_entity->isdead) {
@@ -482,7 +506,9 @@ namespace Game
                 push_game_state(GameState::LOSE);
                 return;
             }
+            
         }
+        
         if (Game::game_is_dead)
         {
             return;
@@ -495,7 +521,7 @@ namespace Game
             }
         }
 
-    
+        
                  
         // Update all entities
         for(Entity& entity : entities)
