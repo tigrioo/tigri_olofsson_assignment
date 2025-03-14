@@ -39,4 +39,7 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\OneDrive\Documents\raylib_template\README.md" />
+  </ItemGroup>
 </Project>
