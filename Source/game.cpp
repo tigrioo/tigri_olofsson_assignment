@@ -7,8 +7,10 @@
 
 #include <stack>
 #include <vector>
-
-bool dead = false;
+namespace Game
+{
+    bool game_is_dead = false; 
+};
 void Entity::update()
 {
    
@@ -59,6 +61,7 @@ void Entity::on_collision(Entity& other)
     {
         other.take_damage(*this, Game::PROJECTILE_DAMAGE);
     }
+    
 }
 
 
@@ -71,6 +74,13 @@ void Entity::take_damage([[maybe_unused]] Entity& from, float damage)
     health -= damage;
 
     PlaySound(res::get_or_load_sound("Assets/hit.wav"));
+    
+    if (health <=0 && possessed_entity_id == 1)
+    {
+        isdead = true;
+        PlaySound(res::get_or_load_sound("Assets/hit_ground.wav")); 
+    }
+   
 }
 
 namespace Game
@@ -78,6 +88,8 @@ namespace Game
     std::stack<GameState> state_stack;
 
     std::vector<Entity> entities = {};
+
+    
 
     size_t possessed_entity_id = 0;
     // We moved to using a vector of entities, a vector can resize when we add entities to it,
@@ -87,8 +99,6 @@ namespace Game
     // No other piece of code should be touching the "entities" vector.
 
     bool running;
-
-
     void push_game_state(GameState state)
     {
         state_stack.push(state);
@@ -114,10 +124,6 @@ namespace Game
 
 	void init()
 	{
-        if (dead) {
-            push_game_state(GameState::MAIN_MENU); // I added this bool to attempt to change the game state to main menu when the player dies but it somehow doesn't work
-
-        }
         running = true;
         push_game_state(GameState::MAIN_MENU);
         
@@ -132,41 +138,41 @@ namespace Game
         res::get_or_load_texture("Assets/boss.png");
         res::get_or_load_texture("Assets/minion.png");
         res::get_or_load_texture("Assets/bomb.png");
-
+        
         Entity player_entity_prototype = {};
 
         player_entity_prototype.move_to_target           = false;
         player_entity_prototype.deal_damage_on_collision = true;
         player_entity_prototype.color    = PLAYER_COLOR;
         player_entity_prototype.health   = 5;
+      
         player_entity_prototype.radius   = 8;
         player_entity_prototype.texture  = res::get_or_load_texture("Assets/player.png");
        
-        if (player_entity_prototype.health == 0) {
-            dead = true;
-        }
+        
         possessed_entity_id = add_entity(player_entity_prototype);
        
 
         for(size_t i = 0; i < 10; i++)
         {
-            Entity entity = {};
-            entity.move_to_target = true;
-            entity.wander         = true;
+            Entity minion_entity = {};
+            minion_entity.move_to_target = true;
+            minion_entity.wander         = true;
+            minion_entity.deal_damage_on_collision = false;
 
-            entity.radius = 8; // px
+            minion_entity.radius = 8; // px
 
-            entity.position.x = (float) GetRandomValue((int) entity.radius, GetScreenWidth()  - 2 * (int) entity.radius);
-            entity.position.y = (float) GetRandomValue((int) entity.radius, GetScreenHeight() - 2 * (int) entity.radius);
+            minion_entity.position.x = (float) GetRandomValue((int)minion_entity.radius, GetScreenWidth()  - 2 * (int)minion_entity.radius);
+            minion_entity.position.y = (float) GetRandomValue((int)minion_entity.radius, GetScreenHeight() - 2 * (int)minion_entity.radius);
 
-            entity.move_target = entity.position;
-            entity.color       = GREEN;
-            entity.health      = 2;
-            entity.move_speed  = Entity::WANDER_SPEED;
-            entity.texture     = res::get_or_load_texture("Assets/minion.png");
+            minion_entity.move_target = minion_entity.position;
+            minion_entity.color       = GREEN;
+            minion_entity.health      = 2;
+            minion_entity.move_speed  = Entity::WANDER_SPEED;
+            minion_entity.texture     = res::get_or_load_texture("Assets/minion.png");
 
 
-            add_entity(entity);
+            add_entity(minion_entity);
         }
         for (size_t i = 0; i < 5; i++)
         {
@@ -191,7 +197,7 @@ namespace Game
         Entity boss_entity = {};
         boss_entity.move_to_target = true;
         boss_entity.wander = true;
-        boss_entity.deal_damage_on_collision = true;
+        boss_entity.deal_damage_on_collision = false;
 
         boss_entity.radius = 4; // px
 
@@ -281,10 +287,102 @@ namespace Game
             current_item += 1;
         }
     }
+    static void do_lose_menu()
+    {
+        ClearBackground(LOSE_BACKGROUND_COLOR);
+
+        constexpr int menu_item_count = 2;
+        int current_item = 0;
+
+        float menu_total_height = menu_item_count * MENU_BUTTON_HEIGHT + (menu_item_count - 1) * MENU_BUTTON_MARGIN;
+        float menu_start_y = (GetScreenHeight() - menu_total_height) / 2.f;
+
+        {
+            Rectangle start_button = {};
+            start_button.width = MENU_BUTTON_WIDTH;
+            start_button.height = MENU_BUTTON_HEIGHT;
+            start_button.x = (GetScreenWidth() - MENU_BUTTON_WIDTH) / 2.f;
+            start_button.y = menu_start_y + current_item * (MENU_BUTTON_HEIGHT + MENU_BUTTON_MARGIN);
+
+            const char* start_button_text = "MAIN MENU";
+
+            if (gui_button(start_button, start_button_text))
+            {
+                push_game_state(GameState::MAIN_MENU);
+            }
+
+            current_item += 1;
+        }
+
+        {
+            Rectangle quit_button = {};
+            quit_button.width = MENU_BUTTON_WIDTH;
+            quit_button.height = MENU_BUTTON_HEIGHT;
+            quit_button.x = (GetScreenWidth() - MENU_BUTTON_WIDTH) / 2.f;
+            quit_button.y = menu_start_y + current_item * (MENU_BUTTON_HEIGHT + MENU_BUTTON_MARGIN);
+
+            const char* quit_button_text = "QUIT";
+
+            if (gui_button(quit_button, quit_button_text))
+            {
+                running = false;
+            }
+
+            current_item += 1;
+        }
+    }
+
+    static void do_win_menu()
+    {
+        ClearBackground(WIN_BACKGROUND_COLOR);
+
+        constexpr int menu_item_count = 2;
+        int current_item = 0;
+
+        float menu_total_height = menu_item_count * MENU_BUTTON_HEIGHT + (menu_item_count - 1) * MENU_BUTTON_MARGIN;
+        float menu_start_y = (GetScreenHeight() - menu_total_height) / 2.f;
+
+        {
+            Rectangle start_button = {};
+            start_button.width = MENU_BUTTON_WIDTH;
+            start_button.height = MENU_BUTTON_HEIGHT;
+            start_button.x = (GetScreenWidth() - MENU_BUTTON_WIDTH) / 2.f;
+            start_button.y = menu_start_y + current_item * (MENU_BUTTON_HEIGHT + MENU_BUTTON_MARGIN);
+
+            const char* start_button_text = "MAIN MENU";
+
+            if (gui_button(start_button, start_button_text))
+            {
+                push_game_state(GameState::MAIN_MENU);
+            }
+
+            current_item += 1;
+        }
+
+        {
+            Rectangle quit_button = {};
+            quit_button.width = MENU_BUTTON_WIDTH;
+            quit_button.height = MENU_BUTTON_HEIGHT;
+            quit_button.x = (GetScreenWidth() - MENU_BUTTON_WIDTH) / 2.f;
+            quit_button.y = menu_start_y + current_item * (MENU_BUTTON_HEIGHT + MENU_BUTTON_MARGIN);
+
+            const char* quit_button_text = "QUIT";
+
+            if (gui_button(quit_button, quit_button_text))
+            {
+                running = false;
+            }
+
+            current_item += 1;
+        }
+    }
     
 
     static void control_entity(Entity& possessed)
     {
+        if (possessed.isdead) {
+            return;
+        }
         Vector2 direction = {};
 
         if(IsKeyDown(KEY_A))
@@ -301,7 +399,7 @@ namespace Game
 
         if(IsKeyDown(KEY_W))
         {
-            direction.y += -1; // This one looks odd but remember that most of the times the Y axis goes from the top to the bottom.
+            direction.y += -1; 
             
         }
 
@@ -316,8 +414,23 @@ namespace Game
 
         Vector2 position_next_frame = Vector2Add(possessed.position, Vector2Scale(direction, PLAYER_SPEED * GetFrameTime()));
 
-        possessed.position = position_next_frame;
+        if (position_next_frame.x > GetScreenWidth() - possessed.radius) {
+            position_next_frame.x = GetScreenWidth() - possessed.radius;
+        }
+        if (position_next_frame.y > GetScreenHeight() - possessed.radius) {
+            position_next_frame.y = GetScreenHeight() - possessed.radius;
+        }
+        if (position_next_frame.x < possessed.radius) {
+            position_next_frame.x = possessed.radius;
+        }
+        if (position_next_frame.y < possessed.radius) {
+            position_next_frame.y = possessed.radius;
+        }
 
+        possessed.position = position_next_frame;
+        if (possessed.isdead) {
+            return;
+        }
         Vector2 shoot_direction = {};
         if(IsKeyPressed(KEY_LEFT))
         {
@@ -356,12 +469,30 @@ namespace Game
         {
             pop_game_state();
         }
+       
+       // if (Game::game_is_dead) {
+       //     push_game_state(GameState::LOSE);
+       // }
 
+        if (possessed_entity_id) {
+            Entity* possessed_entity = get_entity(possessed_entity_id);
+            if (possessed_entity && possessed_entity->isdead) {
+                possessed_entity_id = 0;
+                Game::game_is_dead = true;
+                push_game_state(GameState::LOSE);
+                return;
+            }
+        }
+        if (Game::game_is_dead)
+        {
+            return;
+        }
         if(possessed_entity_id)
         {
             Entity* possessed_entity = get_entity(possessed_entity_id);
-
-            control_entity(*possessed_entity);
+            if (possessed_entity && !possessed_entity->isdead) {
+                control_entity(*possessed_entity);
+            }
         }
 
     
@@ -415,6 +546,8 @@ namespace Game
         {
             entity.draw();
         }
+        
+        
     }
 
     void draw_frame()
@@ -430,6 +563,13 @@ namespace Game
         case GameState::GAME:
             do_game();
             break;
+        case GameState::LOSE:
+            do_lose_menu();
+            break;
+        case GameState::WIN:
+            do_win_menu();
+            break;
+
         }
 	}
 }

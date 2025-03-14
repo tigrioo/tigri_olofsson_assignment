@@ -7,6 +7,8 @@ enum struct GameState
 {
 	MAIN_MENU,
 	GAME,
+	WIN,
+	LOSE
 };
 
 struct Entity
@@ -28,7 +30,7 @@ struct Entity
 	bool move_to_target;
 	bool deal_damage_on_collision;
 	bool die_on_target_reached;
-	
+	bool isdead = false;
 	Texture2D texture;
 
 	Color color;
@@ -45,6 +47,7 @@ struct Entity
 
 	void on_collision(Entity& other); // The game code calls this function every frame where the two entities are colliding.
 	void take_damage(Entity& from, float damage);
+	size_t possessed_entity_id = 0;
 };
 
 namespace Game 
@@ -59,6 +62,8 @@ namespace Game
 
 	constexpr Color MENU_BACKGROUND_COLOR = Color{40, 40, 40, 255};
 	constexpr Color GAME_BACKGROUND_COLOR = Color{40, 40, 80, 255};
+	constexpr Color LOSE_BACKGROUND_COLOR = Color{ 255, 0, 0, 150 };
+	constexpr Color WIN_BACKGROUND_COLOR = Color{ 0, 255, 0, 150 };
 
 	constexpr int MENU_BUTTON_WIDTH  = 150;
 	constexpr int MENU_BUTTON_HEIGHT = FONT_SIZE + 20;
@@ -82,4 +87,6 @@ namespace Game
 
 	bool should_quit();
 	void draw_frame();
+	extern bool game_is_dead;
+	
 };
