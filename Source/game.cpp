@@ -4,27 +4,50 @@
 #include "raymath.h"
 
 #include "resources.h"
-
+#include <iostream>
 #include <stack>
 #include <vector>
 
-namespace Game
-{
-    static float timer = 0.0f;
-    static float time_in_between = 0.5f; 
-    bool game_is_dead = false; 
-};
 void Entity::update()
 {
    
-    if(wander)
+
+    if (wander && texture.id == res::get_or_load_texture("Assets/boss.png").id) //this is the wander for the boss so he stops every 0.5s
     {
-        if(Vector2Distance(position, move_target) < 1)
+
+        if (!is_moving) //this is only true once the boss is at the destination
         {
-            move_target.x = (float) GetRandomValue((int) radius, GetScreenWidth()  - 2 * (int) radius);
-            move_target.y = (float) GetRandomValue((int) radius, GetScreenHeight() - 2 * (int) radius);
+           
+            wander_timer_seconds -= GetFrameTime(); //this is to have the pause 
+            if (wander_timer_seconds <= 0) //once it hits zero the timer has run out and the boss can move again
+            {
+                is_moving = true;
+                
+                move_target.x = (float)GetRandomValue((int)radius, GetScreenWidth() - 2 * (int)radius); // these are for the random generation of an x and y coordinate on the screen for the enemies to move towards
+                move_target.y = (float)GetRandomValue((int)radius, GetScreenHeight() - 2 * (int)radius);
+                
+            }
+        }
+        else
+        {
+            if (Vector2Distance(position, move_target) < 1)
+            {
+                wander_timer_seconds = (float)GetRandomValue(1, 5) / 10.0f; //this gets a random float between 0.1 seconds and 0.5 seconds for the timer
+                is_moving = false;
+
+            }
+            
         }
     }
+    else if (wander && texture.id == res::get_or_load_texture("Assets/minion.png").id) //to make sure that the minions are always moving and aren't effected by the bosses timer pause
+    {
+        if (Vector2Distance(position, move_target) < 1)
+        {
+            move_target.x = (float)GetRandomValue((int)radius, GetScreenWidth() - 2 * (int)radius); // these are for the random generation of an x and y coordinate on the screen for the enemies to move towards
+            move_target.y = (float)GetRandomValue((int)radius, GetScreenHeight() - 2 * (int)radius);
+        }
+    }
+    
 
 
     if(die_on_target_reached)
@@ -59,18 +82,46 @@ void Entity::draw() const
     }
 }
 
-void Entity::on_collision(Entity& other)
+void Entity::on_collision(Entity& other) //For collisions it was becoming difficult to differentiate between enemies and bullets so i decided to manually set what happens to a player, enemy or bullet in each scenario depending on whats colliding 
 {
-    if(deal_damage_on_collision)
-    {
-        other.take_damage(*this, Game::PROJECTILE_DAMAGE);
-        if (other.health <= 0 && possessed_entity_id == 1) {
-            isdead = true;
-            possessed_entity_id = 0;
+    if (deal_damage_on_collision) {
+        Entity* player = Game::get_entity(Game::player_id);
+        if (player && this == player && other.texture.id == res::get_or_load_texture("Assets/minion.png").id)
+        {
+            other.health = 0; //so minion "explodes"
+            this->take_damage(other, Game::PROJECTILE_DAMAGE);
         }
+        else if (player && this == player && other.texture.id == res::get_or_load_texture("Assets/bomb.png").id)
+        {
+            this->health -= 5;
+            this->isdead = true;
+            Game::game_is_dead = true;
+            Game::push_game_state(GameState::LOSE);
+            return;
+        }
+        else if (this->texture.id == res::get_or_load_texture("Assets/minion.png").id && other.texture.id == res::get_or_load_texture("Assets/bomb.png").id)
+        {
+            return;
+        }
+        else if (this->texture.id == res::get_or_load_texture("Assets/bullet.png").id && other.texture.id == res::get_or_load_texture("Assets/bomb.png").id)
+        {
+            this->health = 0;
+            other.take_damage(*this, Game::PROJECTILE_DAMAGE);
+        }
+        else if (this->texture.id == res::get_or_load_texture("Assets/bullet.png").id && other.texture.id == res::get_or_load_texture("Assets/minion.png").id)
+        {
+            this->health = 0;
+            other.health -= 1;
+        }
+        else if (this->texture.id == res::get_or_load_texture("Assets/bullet.png").id && other.texture.id == res::get_or_load_texture("Assets/boss.png").id)
+        {
+            this->health = 0;
+            other.take_damage(*this, Game::PROJECTILE_DAMAGE);
+        }
+       
     }
-    
 }
+
 
 
 // [[maybe_unused]] tells the compiler not to warn us if we don't use the parameter
@@ -82,14 +133,20 @@ void Entity::take_damage([[maybe_unused]] Entity& from, float damage)
     health -= damage;
 
     PlaySound(res::get_or_load_sound("Assets/hit.wav"));
-    
-    if (health <=0 && possessed_entity_id)
+
+    if (health <= 0) // similar to the on collision
     {
+        health = 0;
         isdead = true;
-        possessed_entity_id = 0;
-        PlaySound(res::get_or_load_sound("Assets/hit_ground.wav")); 
+        PlaySound(res::get_or_load_sound("Assets/hit_ground.wav"));
+        Entity* player = Game::get_entity(Game::player_id);
+        if (player && this == player) {
+            Game::game_is_dead = true;
+            Game::push_game_state(GameState::LOSE);
+
+        }
     }
-   
+
 }
 
 namespace Game
@@ -98,9 +155,9 @@ namespace Game
 
     std::vector<Entity> entities = {};
 
-    
+    bool game_is_dead = false;
+    size_t player_id = 0;
 
-    size_t possessed_entity_id = 0;
     // We moved to using a vector of entities, a vector can resize when we add entities to it,
     // which means that pointers to data in the vector might become invalid.
     // Therefore we use indices instead.
@@ -110,7 +167,7 @@ namespace Game
     bool running;
     void push_game_state(GameState state)
     {
-        state_stack.push(state);
+        state_stack.push(state); //to store the different states of the game like the menu, win and lose screen
     }
 	
     void pop_game_state()
@@ -133,7 +190,7 @@ namespace Game
 
 	void init()
 	{
-        game_is_dead = false;
+        game_is_dead = false; // initially set the game_is_dead to false so that when the player dies, this bool becomes true and triggers the lose condition
         running = true;
         push_game_state(GameState::MAIN_MENU);
         
@@ -149,26 +206,24 @@ namespace Game
         res::get_or_load_texture("Assets/minion.png");
         res::get_or_load_texture("Assets/bomb.png");
         
-        Entity player_entity_prototype = {};
-
-        player_entity_prototype.move_to_target           = false;
-        player_entity_prototype.deal_damage_on_collision = true;
-        player_entity_prototype.color    = PLAYER_COLOR;
-        player_entity_prototype.health   = 5;
-      
-        player_entity_prototype.radius   = 8;
-        player_entity_prototype.texture  = res::get_or_load_texture("Assets/player.png");
-       
-        
-        possessed_entity_id = add_entity(player_entity_prototype);
-       
+        Entity player;
+        player.move_to_target           = false;
+        player.deal_damage_on_collision = true;
+        player.color    = PLAYER_COLOR;
+        player.health   = 5;
+        player.isdead = false;
+        player.radius   = 8;
+        player.texture  = res::get_or_load_texture("Assets/player.png");
+        player_id = add_entity(player);
+               
 
         for(size_t i = 0; i < 10; i++)
         {
             Entity minion_entity = {};
             minion_entity.move_to_target = true;
             minion_entity.wander         = true;
-            minion_entity.deal_damage_on_collision = false;
+            minion_entity.deal_damage_on_collision = true;
+           
 
             minion_entity.radius = 8; // px
 
@@ -177,19 +232,21 @@ namespace Game
 
             minion_entity.move_target = minion_entity.position;
             minion_entity.color       = GREEN;
-            minion_entity.health      = 2;
+            minion_entity.health      = 3; // I know this is strange as it should be 2 but with the collision of the bullet and minion it would die after colliding once with a bullet so this was a way to fix it
             minion_entity.move_speed  = Entity::WANDER_SPEED;
             minion_entity.texture     = res::get_or_load_texture("Assets/minion.png");
 
 
             add_entity(minion_entity);
         }
+
+        
         for (size_t i = 0; i < 5; i++)
         {
             Entity bomb_entity = {};
             bomb_entity.move_to_target = false;
             bomb_entity.wander = false;
-            bomb_entity.deal_damage_on_collision = true;
+            bomb_entity.deal_damage_on_collision = true; // by setting this true only another entity which also has this set as true can collide and be dealt damage by the bomb
 
             bomb_entity.radius = 4; // px
 
@@ -223,7 +280,76 @@ namespace Game
 
         add_entity(boss_entity);
 	}
+    float get_boss_x()
+    {
+        for (const auto& entity : entities) // searches through all entities
+        {
+            if (entity.texture.id == res::get_or_load_texture("Assets/boss.png").id) //makes sure that the entity we want position from is the boss by comparing its texture
+            {
+                return float(entity.position.x); //returns the x value of the bosses position in game
+            } 
+            
+            
+        }
+        return 0; //if the boss isn't alive
+        
+    }
+    float get_boss_y()
+    {
+        
+        for (const auto& entity : entities)
+        {
+            if (entity.texture.id == res::get_or_load_texture("Assets/boss.png").id)
+            {
+                return float(entity.position.y);
+            }
+           
+            
+        }
+        return 0;
+       
+    }
 
+    static float spawn_timer = 0.5f;
+    static constexpr float spawn_wait = 0.5f;
+    void spawner() //I made a function which spawns a minion every 5 seconds next to the boss 
+    {
+        bool boss_alive = false;
+        for (const auto& entity : entities) // this is important because without it the minions would continue spawning after boss died 
+        {
+            if (!entity.isdead && entity.texture.id == res::get_or_load_texture("Assets/boss.png").id)
+            {
+                boss_alive = true; //this means we can now spawn minions
+                break;
+            }
+        }
+        if (boss_alive)
+        {
+            spawn_timer -= GetFrameTime();
+            if (spawn_timer <= 0)
+            {
+                Entity minion_entity = {};
+                minion_entity.move_to_target = true;
+                minion_entity.wander = true;
+                minion_entity.deal_damage_on_collision = true;
+
+
+                minion_entity.radius = 8; // px
+
+                minion_entity.position.x = get_boss_x(); //this is pulled from the function
+                minion_entity.position.y = get_boss_y(); //this is also pulled from the function
+
+                minion_entity.move_target = minion_entity.position;
+                minion_entity.color = GREEN;
+                minion_entity.health = 3; // I know this is strange as it should be 2 but with the collision of the bullet and minion it would die after colliding once with a bullet so this was a way to fix it
+                minion_entity.move_speed = Entity::WANDER_SPEED;
+                minion_entity.texture = res::get_or_load_texture("Assets/minion.png");
+
+                add_entity(minion_entity);
+                spawn_timer += spawn_wait;
+            }
+        }
+    }
     bool should_quit()
     {
         return !running || WindowShouldClose();
@@ -243,8 +369,8 @@ namespace Game
         projectile.position    = position;
         projectile.move_target = target;
         projectile.color       = GRAY;
-        projectile.health      = 1;
-        projectile.radius      = 4; // px
+        projectile.health      = 1; //this makes sure that the projectiles aren´t causing too much damage
+        projectile.radius      = 6; // px
         projectile.move_speed  = Entity::PROJECTILE_SPEED;
         projectile.texture     = res::get_or_load_texture("Assets/bullet.png");
 
@@ -253,7 +379,7 @@ namespace Game
         PlaySound(res::get_or_load_sound("Assets/shoot.wav"));
     }
     
-    static void do_main_menu()
+    static void do_main_menu() // the main menu for the game linked with gui
     {
         ClearBackground(MENU_BACKGROUND_COLOR);
 
@@ -274,6 +400,10 @@ namespace Game
 
             if(gui_button(start_button, start_button_text))
             {
+                entities.clear(); //did this at the start of menu so when you die or win the game restarts again
+                player_id = 0;
+                game_is_dead = false;
+                init();
                 push_game_state(GameState::GAME);
             }
 
@@ -297,7 +427,7 @@ namespace Game
             current_item += 1;
         }
     }
-    static void do_lose_menu()
+    static void do_lose_menu() // repeated the same as main menu but changed the background colour to red and added a main menu button and quit button
     {
         ClearBackground(LOSE_BACKGROUND_COLOR);
 
@@ -342,7 +472,7 @@ namespace Game
         }
     }
 
-    static void do_win_menu()
+    static void do_win_menu() // same once again except this has a green background
     {
         ClearBackground(WIN_BACKGROUND_COLOR);
 
@@ -390,12 +520,12 @@ namespace Game
 
     static void control_entity(Entity& possessed)
     {
-        if (possessed.isdead) {
+        if (possessed.isdead) { //this is supposed to check whether the main player has died by seeing if the isdead bool was turned to true when their health went to 0 or below
             return;
         }
         Vector2 direction = {};
 
-        if(IsKeyDown(KEY_A))
+        if(IsKeyDown(KEY_A)) // movement
         {
             direction.x += -1; 
             
@@ -424,7 +554,7 @@ namespace Game
 
         Vector2 position_next_frame = Vector2Add(possessed.position, Vector2Scale(direction, PLAYER_SPEED * GetFrameTime()));
 
-        if (position_next_frame.x > GetScreenWidth() - possessed.radius) {
+        if (position_next_frame.x > GetScreenWidth() - possessed.radius) { //this part is to make sure that the player stays within the bounds of the game
             position_next_frame.x = GetScreenWidth() - possessed.radius;
         }
         if (position_next_frame.y > GetScreenHeight() - possessed.radius) {
@@ -438,11 +568,9 @@ namespace Game
         }
 
         possessed.position = position_next_frame;
-        if (possessed.isdead) {
-            return;
-        }
+       
         Vector2 shoot_direction = {};
-        if(IsKeyPressed(KEY_LEFT))
+        if(IsKeyPressed(KEY_LEFT)) // this is to control the bullets and shooting mechanics based on the key that is pressed
         {
             shoot_direction.x += -1; 
         }
@@ -475,50 +603,39 @@ namespace Game
 
     static void do_game()
     {
-        if(IsKeyPressed(KEY_ESCAPE))
-        {
-            pop_game_state();
-        }
-       
-        if (Game::game_is_dead) {
-            if (state_stack.top() != GameState::LOSE) {
-                push_game_state(GameState::LOSE);
-                return;
-            }
-            else {
-                push_game_state(GameState::LOSE);
-                return;
-            }
-            
-        }
-        if (entities.size() <= 1) {
-            push_game_state(GameState::WIN);
-        }
-        if (entities[0].health <= 0) {
-            push_game_state(GameState::LOSE);
-
-        }
-        if (possessed_entity_id) {
-            Entity* possessed_entity = get_entity(possessed_entity_id);
-            if (possessed_entity && possessed_entity->isdead) {
-                possessed_entity_id = 0;
-                Game::game_is_dead = true;
-                push_game_state(GameState::LOSE);
-                return;
-            }
-            
-        }
+        spawner(); //so minions can spawn
         
-        if (Game::game_is_dead)
+        if (state_stack.top() == GameState::LOSE) //to make sure lose screen works as I had issues with it before
         {
             return;
         }
-        if(possessed_entity_id)
+
+        if(IsKeyPressed(KEY_ESCAPE))
         {
-            Entity* possessed_entity = get_entity(possessed_entity_id);
-            if (possessed_entity && !possessed_entity->isdead) {
-                control_entity(*possessed_entity);
+            pop_game_state();
+            return;
+        }
+       
+        if (entities.size() <= 1 && player_id == 1) { //this is for the win screen I figured by finding if there is only one entity left and the player is still alive because its id i 1 then it must be a win
+            push_game_state(GameState::WIN);
+            return;
+        }
+    
+        if (player_id != 0) { //so if player is alive
+            Entity* player = get_entity(player_id);
+            if (player && player->isdead) { //this was also added because the player wouldn't die for weeks so this double checks the player dies
+                game_is_dead = true;
+                push_game_state(GameState::LOSE);
+                return;
             }
+        }
+      
+        if(player_id != 0){
+            Entity* possessed = get_entity(player_id);
+            if (possessed && !possessed->isdead) {
+                control_entity(*possessed); // to make sure only the player is controllable which was also an issue I had for a while
+            }
+           
         }
 
         
@@ -526,11 +643,12 @@ namespace Game
         // Update all entities
         for(Entity& entity : entities)
         {
-            entity.update();
+            entity.update();//constantly updating the entities in the game
+
         }
 
         // Detect collisions
-        for(Entity& a : entities)
+        for(Entity& a : entities) 
         {
             for(Entity& b : entities)
             {
@@ -548,12 +666,13 @@ namespace Game
         const auto last_entity_alive = std::remove_if(begin(entities), end(entities), 
             [](const Entity& entity) -> bool
             {
-                return entity.health <= 0;
+                return entity.health <= 0 && entity.player_id != player_id; //this removes the entity
             }
         );
 
         entities.erase(last_entity_alive, end(entities));
 
+        
         // Render Frame
 
         ClearBackground(BLUE);

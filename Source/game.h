@@ -11,8 +11,10 @@ enum struct GameState
 	LOSE,
 };
 
+
 struct Entity
 {
+
 	static constexpr float WANDER_SPEED     = 200.f; // pixels/s
 	static constexpr float PROJECTILE_SPEED = 800.f; // pixels/s
 
@@ -27,6 +29,8 @@ struct Entity
 	*/
 
 	bool wander;
+	float wander_timer_seconds; //this is for the boss so there is a pause when he gets to the destination
+	bool is_moving = true; //this is so we can know when the boss is or isn't moving 
 	bool move_to_target;
 	bool deal_damage_on_collision;
 	bool die_on_target_reached;
@@ -41,17 +45,17 @@ struct Entity
     float   move_speed;
 
 	float health;
-
+	
 	void update();
 	void draw() const;
-
 	void on_collision(Entity& other); // The game code calls this function every frame where the two entities are colliding.
 	void take_damage(Entity& from, float damage);
-	size_t possessed_entity_id = 0;
+	size_t player_id;
 };
 
 namespace Game 
 {	
+	extern size_t player_id; //I added the extern so that the game wouldn't crash as I also have player_id defined in Game in the game.cpp script
 	constexpr int INITIAL_WINDOW_WIDTH  = 800;
 	constexpr int INITIAL_WINDOW_HEIGHT = 450;
 
@@ -87,5 +91,4 @@ namespace Game
 	bool should_quit();
 	void draw_frame();
 	extern bool game_is_dead;
-	
 };
